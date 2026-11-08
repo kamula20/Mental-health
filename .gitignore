@@ -1,0 +1,25 @@
+__pycache__/
+.pytest_cache/
+.venv/
+instance/
+node_modules/
+test-results/
+.env
+.test-deps/
+.tooling/
+
+# Project documents and local workspace files
+*.[pP][dD][fF]
+.idea/
+.agents/
+.codex/
+.aws/
+
+# Private configuration, databases and keys
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+*.key
+*.pem

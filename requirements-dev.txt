@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=7.4,<10
+playwright>=1.50,<2
+matplotlib>=3.8,<4

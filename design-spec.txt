@@ -1,0 +1,284 @@
+01   /   FRONTEND DESIGN
+Youth Mental Health Screening Web App UI Design
+Platform recommendation and screen specification | 3 November 2026
+Build a responsive web application with two main experiences: a phone-friendly assessment for participants and a desktop workspace for counsellors. Add a restricted research and administration area within the same application.
+The proposal collects self-reported social media habits and wellbeing questionnaires. It does not require an app to monitor the phone. A browser-based assessment therefore fits the actual research scope and is easier to access through a study link or a school computer.
+Why a web app fits
+Decision factor
+Responsive web app
+Native mobile app
+Questionnaire collection
+Works through a shared link on phones and computers.
+Requires installation for the same task.
+Counsellor reviews
+Room for tables, responses and reports on desktop.
+Small screens make detailed reviews less convenient.
+Proposal alignment
+Explicit web demonstration; HTML, CSS, JavaScript and Flask.
+Adds a platform absent from the stated demonstration.
+Phone monitoring
+Outside this version of the study.
+Could support a later, separately approved device-data study.
+
+Source basis: COMPLETE PROJECT.pdf, sections 1.7, 3.3.4, 3.7.1 and 3.7.3; printed pages 4, 16-17 and 20-21.
+What the system should do
+Collect consent and questionnaire answers, submit an assessment, show clearly labelled screening and research outputs, and support an authorised human review. Treat it as a research screening prototype until its model and operating process are validated.
+02   /   FRONTEND DESIGN
+Product boundaries and user journeys
+Three workspaces with different responsibilities
+Role
+Primary task
+Visible information
+Participant
+Understand the study, complete an assessment, choose support.
+Own answers and authorised summaries; own consent and privacy controls.
+Counsellor
+Review assigned participants and record follow-up.
+Assigned cases and authorised contact information; no unrestricted population browsing.
+Researcher or administrator
+Manage the study, view aggregate results and inspect model status.
+De-identified research data or account configuration, according to separate permissions.
+
+Participant journey
+Invitation link → study information → age eligibility → consent or minor participation pathway → account or study-code access → background questions → social media habits → approved wellbeing questionnaires → review answers → submit → summary → optional support request.
+Counsellor journey
+Sign in → assigned review queue → participant detail → inspect questionnaire and model outputs separately → record a review → agree or schedule follow-up → close or reopen the case with a reason.
+Navigation that matches the task
+Participants get four text links: Home, My assessment, Support and Privacy. Keep the assessment itself focused, with Back, Continue and Save and exit. Counsellors get a fixed side navigation: Review queue, Participants and Reports. Research and account administration are separate permissioned areas.
+Keep the first version focused
+Include registration or study-code access, consent, the Appendix A questionnaire, assessment summaries, a counsellor review queue, basic reports and access management. Saved assessment history is useful; describe it as submission history rather than continuous monitoring.
+Do not add a therapy chatbot, social feed, mood streaks, wearable integrations, app blocking or automatic social media scraping. These features do not serve the stated demonstration and would change the research design.
+03   /   FRONTEND DESIGN
+A visual identity with a clear point of view
+Proposed working name: Between. It suggests the space between online habits and everyday life. Use it only as a design label until the project owner chooses a final name.
+The interface should resemble a well-edited study journal: generous margins, strong section numbering, warm paper backgrounds and carefully aligned text. A narrow sand-coloured column holds secondary guidance. Staff pages use a dark navigation rail and orderly case records.
+
+Proposed colour palette. Colour names and exact values form part of the frontend specification.
+Element
+Specification
+Background and text
+Paper #F7F4EC; surface #FFFFFF; main text #202D39; secondary text #59636A.
+Actions and accents
+Petrol #244B5A for primary actions; clay #91462F for small section labels; sand #EBDAC5 for contextual guidance.
+Status colours
+Low #365A48; moderate #78521D; high #8C3835. Always pair with text. No full-screen red result treatment.
+Typography
+Self-host Source Sans 3 for UI text and Source Serif 4 for participant page titles. Fallbacks: Arial and Georgia. Mockups use installed equivalent fonts.
+Type scale
+Desktop title 40/48 px; mobile title 30/38 px; section 24/32 px; body 17/26 px; labels 15/22 px. Staff data rows 16/24 px.
+Shape and spacing
+4, 8, 12, 16, 24, 32, 48 and 64 px spacing. Controls 6 px radius; panels 8 px maximum. Use borders, not floating shadows.
+
+What gives it character
+Use large serif titles only where someone is reading or reflecting. Use compact sans serif headings in the review workspace. Number assessment sections in clay. Keep primary buttons solid petrol with explicit verbs. Draw a small custom wordmark; use a consistent set of simple outline icons only when useful.
+Avoid gradients, glass effects, floating blobs, stock meditation illustrations, oversized rounded cards, animated brains and decorative AI sparkle icons. Use real content and clear spacing to create the visual quality.
+04   /   FRONTEND DESIGN
+The participant home screen
+
+Concept 1. Desktop participant home. Working name and all visible content are proposed interface design.
+Composition
+At 1440 px, place the content in a 1200 px centred container. Use an eight-column main area and a four-column guidance area. The first viewport answers three questions: what participation involves, how to begin, and what data the system will access.
+Content and actions
+The title reads “A little space to check in with yourself.” Follow it with a plain explanation of the study. “Start my assessment” is the single primary action. Under it, show the three assessment sections. The guidance column states that the system does not log into social media, read messages or monitor the phone.
+Returning and first-time states
+A returning participant sees “Continue my assessment” with the last saved section and timestamp. After submission, replace it with “View my summary” and the submission date. Show a new assessment action only when the study protocol allows another submission; never prompt daily participation by default.
+On a phone
+Stack the guidance below the introduction and action. Use a compact text menu with the same four destinations. Keep “Get support” accessible without completing an assessment. Avoid a large promotional hero that pushes the assessment below the first screen.
+05   /   FRONTEND DESIGN
+Consent and a focused assessment on mobile
+
+Concept 2. Two phone layouts at comparable scale. Example selections illustrate interaction; final research wording requires protocol approval.
+Participation and optional follow-up are separate choices. No checkbox is preselected. The optional support choice must not become a condition of participating in research. The minor pathway adds guardian authorisation and young-person assent before data collection, as required by the approved protocol.
+Each social media question uses large, labelled choices. The selected answer has a dark border, tinted fill and filled radio control. Continue advances only when the required answer is present; Back preserves the answer. A tap never advances automatically.
+“Save and exit” is available during the questionnaire. Save to the authenticated study session on the server; show “Saved” only after acknowledgement. Avoid persistent sensitive drafts on shared devices. If saving fails, keep answers in memory while the page remains open and offer Retry.
+06   /   FRONTEND DESIGN
+Questionnaire fields and wellbeing forms
+Appendix A supplies the background and behaviour questions. Keep their meaning and response encoding aligned with the model. Any wording or category change needs researcher approval and a recorded questionnaire version.
+Data collected
+Frontend control
+Important behaviour
+Age
+Numeric field with visible 13-24 eligibility rule.
+Out-of-range entries stop enrolment politely; do not collect full date of birth by default.
+Gender and education
+Separate radio groups; Other reveals a text field.
+Retain Prefer not to say for gender. Store response codes, not visual labels alone.
+Platforms used
+Checkbox group and Other text field.
+Show selected count; do not request usernames, passwords or account connections.
+Daily social media time
+Single-choice radio list.
+Proposal intervals overlap at boundaries. Approve unambiguous intervals before collection and training.
+Passive scrolling
+Never through Always radio list.
+Add the short behavioural example shown in the mockup.
+Active engagement
+Never through Always radio list.
+Keep separate from passive scrolling; both may be frequent.
+After 11 pm use
+Never through Always radio list.
+Keep the proposal time reference; do not silently change it to midnight.
+Cyberbullying exposure
+Four frequency choices from Appendix A.
+Keep its lifetime wording unless amended; avoid requesting accounts or incident details.
+Regular platform count
+1, 2, 3, 4 or more radio list.
+Distinguish regular use from the earlier list of platforms currently used.
+
+Wellbeing questionnaires
+Use the approved PHQ-9, GAD-7 and WEMWBS versions, including their exact item text, order, recall period and response labels. Do not rewrite clinical questions into casual copy. Present one instrument per page, with vertically stacked items and fully labelled response options; adapt layout only within its administration guidance.
+Show instrument names and progress, not a live severity score. Missing or declined responses remain missing; do not convert them to zero. Incomplete instruments produce an incomplete status and no unsupported score. Obtain the appropriate WEMWBS licence before incorporating its items. [2]
+07   /   FRONTEND DESIGN
+Results that are useful and honest
+
+Concept 3. Assessment summary with a fictional model class. Live model output is shown only after validation and release approval.
+Keep three kinds of information separate
+First, show the behavioural model estimate, its creation date, model version and data completeness. Second, show each questionnaire result in its own section using the approved interpretation. Third, show the counsellor review status. A model class, questionnaire severity and human judgement are different outputs.
+What the participant should read
+Use “Research model estimate: Moderate risk” with “This is a research estimate, not a diagnosis.” Do not say “You have depression”, “You are safe” or “Your social media use caused this”. Offer a conversation for every class, including Low. Do not show a probability unless it has been calibrated and its meaning can be explained.
+When a result cannot be produced
+If required inputs are missing or the model is unavailable, show “No model estimate available” and a reason. Submitted answers and any valid questionnaire scores remain accessible. Do not replace an unavailable model with a made-up heuristic or turn missing data into Low risk.
+The proposal uses cross-sectional data. Describe the output as a current research estimate; it does not establish future illness or causation. Its proposed AUC target is a research objective, not evidence of clinical readiness.
+08   /   FRONTEND DESIGN
+Support and privacy as real screens
+Support
+Use a straightforward heading, “Talk to someone”, followed by available services in a simple list. Each service needs its name, who can use it, opening hours, contact method and last verification date. Keep emergency guidance visibly separate from routine counselling. Populate local contacts only after verification; do not hard-code invented numbers.
+“Request a conversation” opens a short form: preferred contact method, permitted contact details, suitable contact times and permission to share the request with an assigned counsellor. After a successful submission, show its reference and status. Publish a response time only when the service can meet it. Disclose when no one is currently monitoring requests.
+A separate safety route
+A safety-related questionnaire response follows the approved safeguarding process independently of the behavioural model estimate. A Low model class must never dismiss it. Show immediate support information and route the event to trained staff according to the operating protocol. Staff review states must include acknowledgement and handover, not merely a red badge.
+Before collecting live wellbeing responses, the operator needs an approved response plan and staffed escalation arrangements. NIMH guidance similarly calls for a plan before suicide-risk screening; this document does not introduce the ASQ as another required questionnaire. [3]
+Privacy and participation controls
+Organise Privacy into four readable sections: information collected, who can access it, how long it is kept, and participation choices. State the real limits of confidentiality, including safeguarding responsibilities. Avoid an absolute promise that nobody else will ever see an answer.
+Research records use participant IDs. Optional identified follow-up requires a separately restricted identity link. Explain this as pseudonymous research participation; once a counsellor can contact someone, it is not fully anonymous.
+Provide “Withdraw from study” and “Request removal of my information” as distinct actions. Confirm their actual consequences and any approved retention limits before submission. Show a receipt and progress state. On shared devices, provide clear sign-out, session expiry and neutral browser titles such as “Assessment”.
+09   /   FRONTEND DESIGN
+A counsellor workspace built around review
+
+Concept 4. Assigned review queue. All participant IDs, timestamps and counts are fictional.
+The queue is the home screen
+Open directly to assigned work. Show review-state counts above the list rather than oversized statistic cards. Columns are Participant ID, Research estimate, Review state and Updated. Keep the model class separate from urgency; clinical or safeguarding priority follows the approved protocol.
+Finding and opening records
+Search by participant ID. Filter by review state, model class, submission date and missing information. Keep active filters visible and offer Clear filters. Make the row title a real link; keyboard users can open it without a mouse. Return from a case to the same filters, sort order and page.
+Review status vocabulary
+Use Needs review, In progress, Follow-up arranged and Closed. Treat Missing answers and Model unavailable as data conditions rather than clinical conclusions. A separate protocol-driven safety queue may be required for live deployment; it needs explicit ownership and acknowledgement.
+Empty and restricted states
+An empty queue says “No assigned assessments need review” and offers Refresh. A counsellor with no assigned participants sees an assignment explanation. Unauthorised records are rejected by the server, even if someone edits a URL. Remove participant identity from exported queue views unless explicitly authorised.
+10   /   FRONTEND DESIGN
+The participant record and review action
+
+Concept 5. Participant record overview. Reported habits are shown as observations, not causal explanations.
+Record structure
+The header shows participant ID, assessment timestamp and assigned reviewer. Use Overview, Responses and Follow-up tabs. Overview separates model output, questionnaire results and data quality. Responses shows the exact submitted answer with its question and questionnaire version. Follow-up shows dated review events in chronological order.
+The review panel
+Keep the action panel beside the record on desktop and below it on smaller screens. It contains review status, a confidential note and Save review. Change the button to “Saving” during submission, then show a saved timestamp. Never imply that changing the review status changes the model estimate.
+Contact and accountability
+Reveal contact information only to authorised staff when the participant has opted into contact or the approved safeguarding process permits access. Log who viewed and changed the record. Notes are not automatically participant-visible; clearly label their actual audience.
+A follow-up action records owner, due date and outcome. Closing requires a short reason. If another staff member has edited the record, show a version conflict and ask the reviewer to reload before saving; do not overwrite their work silently.
+11   /   FRONTEND DESIGN
+Reports and restricted study controls
+Reports for counsellors
+Use a print-friendly report with participant ID, assessment date, separate questionnaire results, model version and class, completion status, review status and agreed next action. Place “Research screening summary” in its title. A timestamp and interpretation note belong on every export. Do not include hidden browser-only content in the print output.
+Research summary
+The default research view shows cohort filters, submission counts, completeness and the distribution of research classes. Use labelled horizontal bars with counts and denominators; offer the same data as a table. Distinguish “No estimate” from Low. Avoid small identifiable subgroup breakdowns; configure suppression according to the study protocol.
+Model evaluation
+Give researchers a dedicated page with the released model version, training dataset version, target definition, evaluation date, test sample size and class counts. Show accuracy, precision, recall, F1 and AUC only from stored evaluation results. Include a confusion matrix and explain which class and averaging method each metric refers to.
+Before a model is released, the participant result screen says “Research model not available”. A developer demo may use fictional outputs only when the entire workspace is visibly labelled Demo. Never display an invented “95% accurate” claim.
+Administration
+Area
+Required frontend behaviour
+Accounts and roles
+Invite or activate staff; assign roles; deactivate access; confirm the affected account before saving.
+Assignments
+Assign counsellors to participants; show the current owner and record the change.
+Study configuration
+Versioned consent text, questionnaire configuration, support directory and enrolment status.
+Model status
+Read-only released version and availability by default. Model replacement requires a separate controlled release process.
+Access history
+Filterable record of sensitive access and changes, visible only to authorised administrators.
+
+12   /   FRONTEND DESIGN
+Interaction rules and responsive behaviour
+Situation
+Visible behaviour
+Initial loading
+Short text such as Loading your assessment; reserve layout space. Avoid a fake percentage.
+Invalid answer
+Error summary at the top plus a specific inline message. Keep all entered answers and move focus to the summary.
+Connection lost
+State what has not saved. Keep current in-memory answers while the page remains open; offer Retry.
+Submit assessment
+Disable duplicate submission during the request; show Submitted only after server acknowledgement. Reuse the submission ID on retry.
+Session expiring
+Warn before expiry where practical; offer Continue session. After expiry require sign-in and recover only server-saved work.
+No result or service error
+Give the specific unavailable state and a useful next action. Never show a success screen or Low risk fallback.
+Destructive choice
+Use a plain confirmation naming the action and consequence, with Cancel as a clear alternative.
+
+Responsive layout
+At 1200 px and above, use a 1200 px content maximum, 32 px gutters, a 224 px staff rail and a two-column participant composition. At 768-1199 px, collapse the staff rail into a labelled menu and move contextual guidance below the main task. Below 768 px, use one column with 20 px side padding; questionnaire controls fill the width.
+Support 320 px wide screens without page-level horizontal scrolling. Staff queue rows become stacked records with the same labels, ordered Participant, Review state, Estimate and Updated. Preserve filters and sorting. Reserve table scrolling only for intrinsically tabular research data, with an accessible label.
+Accessibility and performance
+Target WCAG 2.2 AA. Use semantic headings, native radio and checkbox groups, visible labels, keyboard navigation, clear focus and announced save/error messages. Normal text needs at least 4.5:1 contrast; large text needs 3:1. [4] Design primary controls at least 44 by 44 CSS px, above the 24 px WCAG AA minimum subject to its exceptions. [5]
+Test 200% text zoom and reflow at 320 CSS px. Status must make sense without colour. Respect reduced motion. Keep animation to brief state changes, self-host fonts and avoid heavy media. Use server-backed drafts; sensitive responses must not enter analytics, URLs, browser caches or service-worker offline storage.
+13   /   FRONTEND DESIGN
+Frontend handoff and acceptance criteria
+Screen inventory
+Participant
+Counsellor
+Restricted study area
+Study information and eligibility
+Staff sign-in and recovery
+Research overview
+Consent and assent pathway
+Assigned review queue
+Dataset and completeness view
+Account or study-code access
+Participant overview
+Model evaluation and status
+Background and behaviour forms
+Submitted responses
+Accounts and permissions
+Approved wellbeing forms
+Review and follow-up history
+Assignments and consent versions
+Review answers and submit
+Print-friendly report
+Support directory management
+Summary, Support and Privacy
+Access denied and empty queue
+Audit history and error states
+
+Reusable components to design first
+Build the participant header, staff shell, page heading, labelled form field, choice group, section progress, error summary, save indicator, status label, queue record, review panel, confirmation dialog and print report. Define default, hover, keyboard-focus, selected, disabled, loading and error variants. Keep one primary action per task region.
+Implementation boundary
+The proposed HTML, CSS and JavaScript frontend can work with Flask and MySQL as specified in the proposal. A native app or a large frontend framework is not required for this scope. The server must enforce access, validate answers, score approved instruments and provide model results; hiding controls in the UI does not enforce permission.
+Review the design against real tasks
+A participant must be able to understand data use, decline optional follow-up, complete the assessment on a phone, correct an earlier answer and recover from a failed submission. A counsellor must be able to open an assigned record, distinguish a model estimate from questionnaire results and save a follow-up without losing queue context.
+Acceptance also requires no diagnosis claims, no result generated from missing inputs, no cross-participant data exposure, visible demo labels for fictional outputs, readable phone layouts and a keyboard-complete workflow. Test these tasks with representative young people and counsellors before release.
+Before live data collection, settle the overlapping time bands, the model target and class thresholds, questionnaire versions and permissions, the minor participation process, retention rules, and staffed safeguarding arrangements. These decisions determine the final content and states of the UI.
+14   /   FRONTEND DESIGN
+Source mapping and design references
+The source proposal establishes the research scope. The working name, visual identity, layouts, review workflow and screen behaviour in this specification are design recommendations.
+Proposal location
+Requirement carried into this design
+Section 1.7; printed p 4
+Ages 13-24, self-reported data, cross-sectional study and the three named wellbeing instruments.
+Section 2.6; printed p 12
+Behavioural inputs, research classes, alerts and reports.
+Sections 3.3.4 and 3.7.3; printed pp 16-17 and 21
+Web demonstration and the HTML, CSS, JavaScript, Flask, MySQL and Python stack.
+Section 3.7.1; printed p 20
+Registration, questionnaire completion, prediction, reporting and dashboards.
+Section 3.9; printed p 23
+Voluntary participation, consent, privacy and the ability to withdraw.
+Appendix A; printed p 26
+Background fields, social media behaviour questions and approved instrument use.
+
+References
+[1] Kamula, J. (2026). Design and implementation of a machine learning based system for predicting youth mental health risk using social media usage patterns. Zetech University project proposal. Supplied as COMPLETE PROJECT.pdf. Page references above use the printed numbering; printed p 1 is PDF page 11.
+[2] University of Warwick. WEMWBS licences and pricing; and How it works. Consulted 3 November 2026. Confirms the need for a licence appropriate to the intended use.https://warwick.ac.uk/services/innovations/wemwbs/licenses/https://warwick.ac.uk/services/innovations/wemwbs/how/
+[3] National Institute of Mental Health. Ask Suicide-Screening Questions toolkit. Consulted 3 November 2026. Used for the principle of an established response plan and trained follow-up, not as a proposed addition to the study instruments.https://www.nimh.nih.gov/research/research-conducted-at-nimh/asq-toolkit-materials
+[4] W3C. Understanding WCAG 2.2 Success Criterion 1.4.3 Contrast Minimum. Consulted 3 November 2026.https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html
+[5] W3C. Understanding WCAG 2.2 Success Criterion 2.5.8 Target Size Minimum. Consulted 3 November 2026.https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html

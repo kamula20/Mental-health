@@ -1,0 +1,20 @@
+{
+  "raw_rows": 6066,
+  "invalid_rows_removed": 6,
+  "duplicates_removed": 60,
+  "clean_rows": 6000,
+  "missing_features": {
+    "age": 130,
+    "daily_time": 150,
+    "passive": 147,
+    "active": 152,
+    "night": 153,
+    "cyberbullying": 153,
+    "regular_count": 153
+  },
+  "class_counts": {
+    "Low": 2080,
+    "Moderate": 1309,
+    "High": 2611
+  }
+}

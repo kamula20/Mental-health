@@ -1,0 +1,5 @@
+* text=auto
+
+# Preserve the exact bytes checked by the ML provenance and integrity hashes.
+/ml/data/** -text
+/ml/artifacts/** -text
