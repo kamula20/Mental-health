@@ -89,7 +89,7 @@ try:
         page.goto(BASE+'#about')
         page.wait_for_selector('.info-details')
         page.get_by_text('Current tools and availability',exact=True).click()
-        check(page.get_by_text('PHQ-9, GAD-7 and WEMWBS are not administered or scored.',exact=False).is_visible(),'Tool availability and permissions remain accessible')
+        check(page.get_by_text('PHQ-9 and GAD-7 can be completed and scored separately from model estimates.',exact=False).is_visible(),'Tool availability and permissions remain accessible')
         page.goto(BASE)
         page.wait_for_selector('.home-main')
         visual_requests=[]
@@ -153,7 +153,7 @@ try:
         check(page.locator('input[name=night][value=sometimes]').is_checked(), 'Back and resume preserve answers')
         page.get_by_role('button', name='Continue', exact=False).click()
         page.wait_for_selector('.instrument-row')
-        check(page.get_by_text('Wellbeing questionnaires are not enabled.', exact=True).is_visible(), 'Unapproved wellbeing instruments remain disabled')
+        check(page.get_by_text('Wellbeing questions are optional.', exact=True).is_visible(), 'Wellbeing questionnaire completion remains optional')
         page.get_by_role('button', name='Review my answers', exact=False).click()
         page.wait_for_selector('.review-heading')
         runtime = app.extensions['between_model']

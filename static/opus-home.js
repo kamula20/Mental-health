@@ -169,7 +169,7 @@
           '<li class="opus-step opus-step-2"><span class="opus-step-num" aria-hidden="true">2</span><h3>Clinician reviews</h3><p>Self-reported answers, in context.</p></li>' +
           '<li class="opus-step opus-step-3"><span class="opus-step-num" aria-hidden="true">3</span><h3>Talk &amp; follow up</h3><p>Agree next steps together.</p></li>' +
         '</ol>' +
-        '<p class="opus-footnote">Research prototype. Model estimates require clinical validation. PHQ-9, GAD-7 and WEMWBS are not administered.</p>' +
+        '<p class="opus-footnote">Assessments, wellbeing questionnaires and clinician follow-up in one place. Research model estimates require clinical validation.</p>' +
       '</section>' +
 
       /* ---------- NEVER ---------- */

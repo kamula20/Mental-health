@@ -15,6 +15,8 @@ from flask import Flask, abort, g, jsonify, make_response, request, send_from_di
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ml.service import DEFAULT_ARTIFACT_DIR, ModelService
+import instruments
+import workspace
 
 ROOT = Path(__file__).resolve().parent
 STATES = ('Needs review', 'In progress', 'Follow-up arranged', 'Closed')
@@ -29,15 +31,34 @@ def now():
 
 def create_app(test_config=None):
     app = Flask(__name__, static_folder='static')
-    app.config.update(DATABASE=str(ROOT / 'instance' / 'between.sqlite3'),
+    demo_mode = os.environ.get('BETWEEN_DEMO', '1') != '0'
+    app.config.update(DATABASE=os.environ.get('BETWEEN_DATABASE', str(ROOT / 'instance' / 'between.sqlite3')),
                       SECRET_KEY=os.environ.get('BETWEEN_SECRET_KEY'),
                       SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
                       SESSION_COOKIE_SECURE=os.environ.get('BETWEEN_HTTPS') == '1',
                       PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
                       ML_ARTIFACT_DIR=str(DEFAULT_ARTIFACT_DIR),
+                      DEMO_MODE=demo_mode,
+                      PRODUCTION=os.environ.get('BETWEEN_ENV') == 'production',
+                      APP_BASE_URL=os.environ.get('BETWEEN_BASE_URL', 'http://127.0.0.1:5000'),
+                      MAIL_MODE=os.environ.get('BETWEEN_MAIL_MODE', 'preview' if demo_mode else 'manual'),
+                      SMTP_HOST=os.environ.get('BETWEEN_SMTP_HOST', ''),
+                      SMTP_PORT=int(os.environ.get('BETWEEN_SMTP_PORT', '587')),
+                      SMTP_FROM=os.environ.get('BETWEEN_SMTP_FROM', ''),
+                      SMTP_USERNAME=os.environ.get('BETWEEN_SMTP_USERNAME', ''),
+                      SMTP_PASSWORD=os.environ.get('BETWEEN_SMTP_PASSWORD', ''),
+                      EXTERNAL_EVALUATION=os.environ.get('BETWEEN_EXTERNAL_EVALUATION'),
                       MAX_CONTENT_LENGTH=128 * 1024)
     if test_config:
         app.config.update(test_config)
+    if app.config['TESTING'] and (not test_config or 'MAIL_MODE' not in test_config):
+        app.config['MAIL_MODE'] = 'preview'
+    if app.config['MAIL_MODE'] not in ('preview', 'manual', 'smtp'):
+        raise ValueError('BETWEEN_MAIL_MODE must be preview, manual or smtp.')
+    if app.config['MAIL_MODE'] == 'smtp' and not (app.config['SMTP_HOST'] and app.config['SMTP_FROM']):
+        raise ValueError('SMTP delivery needs BETWEEN_SMTP_HOST and BETWEEN_SMTP_FROM.')
+    if app.config['PRODUCTION'] and (app.config['DEMO_MODE'] or not app.config['SECRET_KEY'] or len(app.config['SECRET_KEY']) < 32 or not app.config['SESSION_COOKIE_SECURE'] or not app.config['APP_BASE_URL'].startswith('https://') or app.config['MAIL_MODE'] == 'preview'):
+        raise ValueError('Production requires demo access disabled, a stable 32+ character secret, secure cookies, an HTTPS base URL, and manual or SMTP account delivery. See docs/deployment.md.')
     model = ModelService(app.config['ML_ARTIFACT_DIR'])
     app.extensions['between_model'] = model
     Path(app.config['DATABASE']).parent.mkdir(parents=True, exist_ok=True)
@@ -93,6 +114,9 @@ def create_app(test_config=None):
         if session.get('user_id') and time.time() > session.get('expires', 0):
             session.clear()
             abort(401, description='Your session expired. Sign in again; your server-saved draft is recoverable.')
+        if session.get('user_id') and session.get('auth_version', 0) != ws['security_version'](session['user_id']):
+            session.clear()
+            abort(401, description='Your password changed. Sign in again with your new password.')
 
     @app.after_request
     def headers(response):
@@ -101,6 +125,8 @@ def create_app(test_config=None):
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        if app.config['SESSION_COOKIE_SECURE']:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000'
         return response
 
     @app.errorhandler(400)
@@ -150,8 +176,12 @@ def create_app(test_config=None):
         result.update(demo=True, model_version=prediction['model_version'], prediction=prediction,
                       questionnaire_version=row['questionnaire_version'],
                       model_reason=prediction.get('reason'),
-                      instruments=[{'name': name, 'status': 'Not administered', 'score': None}
-                                   for name in ('PHQ-9', 'GAD-7', 'WEMWBS')])
+                      instruments=ws['instruments'](row),
+                      needs_direct_checkin=instruments.needs_direct_checkin(json.loads(row['answers'])),
+                      conclusion=ws['conclusion'](row['participant_id'], g.user['role'] == 'participant'))
+        if g.user['role'] == 'participant':
+            for instrument in result['instruments']:
+                instrument.pop('source_reference', None)
         if full:
             result['answers'] = json.loads(row['answers'])
             result['explanation'] = prediction.get('explanation') or model.explain(result['answers'], prediction)
@@ -170,7 +200,7 @@ def create_app(test_config=None):
     @app.get('/api/session')
     def current_session():
         current = user()
-        return jsonify(csrf=session['csrf'], demo=True,
+        return jsonify(csrf=session['csrf'], demo=app.config['DEMO_MODE'],
                        expires=session.get('expires'),
                        user={k: current[k] for k in ('id', 'name', 'role')} if current else None)
 
@@ -188,7 +218,7 @@ def create_app(test_config=None):
         if not current or not check_password_hash(current['password'], password):
             abort(401, description='The email or password is incorrect.')
         session.clear()
-        session.update(user_id=current['id'], csrf=secrets.token_urlsafe(32), expires=time.time() + 1800)
+        session.update(user_id=current['id'], csrf=secrets.token_urlsafe(32), expires=time.time() + 1800, auth_version=ws['security_version'](current['id']))
         session.permanent = True
         audit('Signed in', current['id'])
         db().commit()
@@ -196,6 +226,8 @@ def create_app(test_config=None):
 
     @app.post('/api/study-access')
     def study_access():
+        if not app.config['DEMO_MODE']:
+            abort(403, description='Public demo access is disabled. Use an invited account.')
         data = payload()
         if text(data, 'code', 40).upper() != 'BETWEEN-DEMO':
             abort(400, description='This demo study code was not recognised. Use BETWEEN-DEMO.')
@@ -232,13 +264,14 @@ def create_app(test_config=None):
         draft = db().execute('SELECT * FROM drafts WHERE user_id=?', (g.user['id'],)).fetchone()
         submitted = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
         return jsonify(participant_id=participant['participant_id'], withdrawn=bool(participant['withdrawn']),
+                       repeat_open=ws['repeat_open'](g.user['id']),
                        draft={'answers': json.loads(draft['answers']), 'step': draft['step'], 'updated': draft['updated']} if draft else None,
                        submission=record_json(submitted, True) if submitted else None)
 
     def validate_answers(answers, complete=False):
         if not isinstance(answers, dict):
             abort(400, description='Answers must be an object.')
-        allowed = {'age', 'consent', 'privacy', 'guardian', 'assent', 'contact_opt_in', 'gender', 'gender_other', 'education', 'education_other', 'platforms', 'platforms_other', 'daily_time', 'passive', 'active', 'night', 'cyberbullying', 'regular_count'}
+        allowed = {'age', 'consent', 'privacy', 'guardian', 'assent', 'contact_opt_in', 'gender', 'gender_other', 'education', 'education_other', 'platforms', 'platforms_other', 'daily_time', 'passive', 'active', 'night', 'cyberbullying', 'regular_count', 'wellbeing_opt_in', 'phq9', 'gad7', 'phq9_difficulty', 'gad7_difficulty'}
         if set(answers) - allowed:
             abort(400, description='Unrecognised questionnaire fields.')
         errors = {}
@@ -278,6 +311,7 @@ def create_app(test_config=None):
                 for key in ('guardian', 'assent'):
                     if answers.get(key) is not True:
                         errors[key] = 'The minor demo pathway requires both guardian authorisation and assent.'
+        errors.update(instruments.validate(answers, complete))
         return errors
 
     @app.put('/api/assessment/draft')
@@ -296,7 +330,7 @@ def create_app(test_config=None):
         if age < 18 and (answers.get('guardian') is not True or answers.get('assent') is not True):
             abort(400, description='Complete the guardian and assent demo pathway before saving.')
         participant = db().execute('SELECT * FROM participants WHERE user_id=?', (g.user['id'],)).fetchone()
-        if participant['withdrawn'] or db().execute('SELECT 1 FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone():
+        if participant['withdrawn'] or db().execute('SELECT 1 FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone() and not ws['repeat_open'](g.user['id']):
             abort(409, description='This assessment is no longer open for editing.')
         step = data.get('step', 1)
         if type(step) is not int or not 1 <= step <= 4:
@@ -313,11 +347,15 @@ def create_app(test_config=None):
         submission_id = text(data, 'submission_id', 80)
         if not submission_id:
             abort(400, description='A submission reference is required.')
+        historical = ws['historical_submission'](g.user['id'], submission_id)
+        if historical:
+            return jsonify(submission=historical, duplicate=True)
         existing = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
         if existing:
             if existing['submission_id'] == submission_id:
                 return jsonify(submission=record_json(existing, True), duplicate=True)
-            abort(409, description='This participation already has a submitted assessment.')
+            if not ws['repeat_open'](g.user['id']):
+                abort(409, description='Start a follow-up assessment from your summary before submitting again.')
         answers = data.get('answers', {})
         errors = validate_answers(answers, True)
         if errors:
@@ -326,11 +364,21 @@ def create_app(test_config=None):
         if participant['withdrawn']:
             abort(409, description='This participation has been withdrawn.')
         prediction = model.predict(answers)
+        first_clinician = db().execute("SELECT id FROM users WHERE role='counsellor' AND active=1 ORDER BY created,id LIMIT 1").fetchone()
         stamp = now()
         try:
-            db().execute('INSERT INTO assessments VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            db().execute('BEGIN IMMEDIATE')
+            latest = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
+            if latest and latest['submission_id'] == submission_id:
+                db().rollback()
+                return jsonify(submission=record_json(latest, True), duplicate=True)
+            if latest:
+                if not ws['repeat_open'](g.user['id']):
+                    abort(409, description='This assessment has already been submitted.')
+                ws['archive'](latest)
+            db().execute('INSERT INTO assessments VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(participant_id) DO UPDATE SET submission_id=excluded.submission_id,answers=excluded.answers,submitted_at=excluded.submitted_at,updated=excluded.updated,estimate=excluded.estimate,review_state=excluded.review_state,version=assessments.version+1,complete=excluded.complete,contact_opt_in=excluded.contact_opt_in,questionnaire_version=excluded.questionnaire_version',
                          (participant['participant_id'], g.user['id'], submission_id, json.dumps(answers), stamp, stamp,
-                          prediction['estimate'], 'Needs review', 'counsellor', 1, 0, int(answers.get('contact_opt_in', False)), 1, QUESTIONNAIRE_VERSION))
+                          prediction['estimate'], 'Needs review', first_clinician['id'] if first_clinician else None, 1, int(answers.get('wellbeing_opt_in') is True), int(answers.get('contact_opt_in', False)), 1, QUESTIONNAIRE_VERSION))
             db().execute('INSERT INTO model_predictions(participant_id,result,created) VALUES(?,?,?)',
                          (participant['participant_id'], json.dumps(prediction), stamp))
         except sqlite3.IntegrityError:
@@ -340,7 +388,12 @@ def create_app(test_config=None):
                 return jsonify(submission=record_json(existing, True), duplicate=True)
             abort(409, description='A submission already exists. Open your summary.')
         db().execute('DELETE FROM drafts WHERE user_id=?', (g.user['id'],))
+        db().execute('DELETE FROM assessment_cycles WHERE user_id=?', (g.user['id'],))
         audit('Demo assessment submitted', participant['participant_id'])
+        assigned = db().execute('SELECT assigned_to FROM assessments WHERE participant_id=?', (participant['participant_id'],)).fetchone()[0]
+        ws['notify'](assigned, 'assessment:'+submission_id,
+                     'An assigned assessment needs a direct wellbeing check-in.' if instruments.needs_direct_checkin(answers) else 'A new assigned assessment is ready for review.',
+                     '#staff/case/'+participant['participant_id']+'/overview')
         db().commit()
         row = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
         return jsonify(submission=record_json(row, True)), 201
@@ -445,6 +498,8 @@ def create_app(test_config=None):
         note, owner, due_date, outcome = text(data, 'note'), text(data, 'owner', 100), text(data, 'due_date', 20), text(data, 'outcome', 500)
         if status not in STATES:
             abort(400, description='Choose a valid review status.')
+        if status == 'Closed' and db().execute("SELECT 1 FROM appointments WHERE participant_id=? AND state='Scheduled'", (pid,)).fetchone():
+            abort(409, description='Complete or cancel outstanding appointments before closing this case.')
         if status == 'Closed' and not outcome:
             abort(400, description='A short closing reason is required.')
         if row['review_state'] == 'Closed' and status != 'Closed' and not outcome:
@@ -473,6 +528,8 @@ def create_app(test_config=None):
         audit('Opened research screening report', pid)
         db().commit()
         report = record_json(row, True)
+        if report['conclusion']:
+            report['conclusion'].pop('private_note', None)
         report.pop('contact', None)
         report['events'] = [{key: event[key] for key in ('status', 'owner', 'due_date', 'outcome', 'created')} for event in report['events']]
         return jsonify(report=report, generated_at=now())
@@ -530,6 +587,8 @@ def create_app(test_config=None):
         if uid == g.user['id']:
             abort(400, description='Ask another administrator to change your own access.')
         if existing['role'] == 'counsellor' and (not data['active'] or role != 'counsellor'):
+            if db().execute("SELECT 1 FROM appointments WHERE owner_id=? AND state='Scheduled'", (uid,)).fetchone():
+                abort(409, description='Reassign this clinician’s scheduled appointments before changing their access.')
             count = db().execute('SELECT count(*) FROM assessments WHERE assigned_to=? AND review_state != ?', (uid, 'Closed')).fetchone()[0]
             if count:
                 abort(409, description='Reassign this counsellor’s open cases before changing their access.')
@@ -541,6 +600,8 @@ def create_app(test_config=None):
     @app.post('/api/admin/invite')
     @require('administrator')
     def invite():
+        if not app.config['DEMO_MODE']:
+            abort(403, description='Use account invitations to create staff access.')
         data = payload()
         email, name, role = text(data, 'email', 254).lower(), text(data, 'name', 100), text(data, 'role', 30)
         if '@' not in email or not name or role not in ('counsellor', 'researcher', 'administrator') or data.get('confirmed') is not True:
@@ -565,6 +626,8 @@ def create_app(test_config=None):
         changed = db().execute('UPDATE assessments SET assigned_to=?,version=version+1,updated=? WHERE participant_id=?', (owner, now(), pid))
         if changed.rowcount != 1:
             abort(404, description='Assessment not found.')
+        db().execute("UPDATE appointments SET owner_id=?,version=version+1 WHERE participant_id=? AND state='Scheduled'", (owner, pid))
+        ws['notify'](owner, 'assignment:'+pid+':'+now(), 'An assessment has been assigned to your workspace.', '#staff/case/'+pid+'/overview')
         audit('Changed assignment', pid, owner)
         db().commit()
         return jsonify(saved=True)
@@ -587,12 +650,31 @@ def create_app(test_config=None):
         db().commit()
         return jsonify(saved=True)
 
+    @app.get('/healthz')
+    def health():
+        return jsonify(status='ok')
+
+    @app.get('/readyz')
+    def ready():
+        try:
+            db().execute('SELECT 1').fetchone()
+            sample={'age':19,'daily_time':'1to3','passive':'sometimes','active':'sometimes','night':'sometimes','cyberbullying':'never','regular_count':'2'}
+            ok = model.status()['available'] and model.predict(sample)['estimate'] is not None
+        except sqlite3.Error:
+            ok = False
+        return jsonify(status='ready' if ok else 'unavailable'), 200 if ok else 503
+
     with app.app_context():
-        init_db(db())
+        init_db(db(), seed=app.config['DEMO_MODE'])
+        if app.config['PRODUCTION'] and db().execute("SELECT 1 FROM users WHERE active=1 AND email LIKE '%@between.demo'").fetchone():
+            raise ValueError('Production cannot use active public example accounts. Configure a fresh private database and bootstrap an administrator.')
+        workspace.init_schema(db())
+    ws = workspace.register(app, db, require, user, payload, text, record, record_json, audit, now)
+    app.extensions['workspace'] = ws
     return app
 
 
-def init_db(connection):
+def init_db(connection, seed=True):
     connection.executescript('''
     CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,password TEXT NOT NULL,name TEXT NOT NULL,role TEXT NOT NULL,active INTEGER NOT NULL,created TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS participants(user_id TEXT PRIMARY KEY REFERENCES users(id),participant_id TEXT UNIQUE NOT NULL,withdrawn INTEGER NOT NULL,created TEXT NOT NULL);
@@ -608,7 +690,7 @@ def init_db(connection):
     CREATE INDEX IF NOT EXISTS assigned_cases ON assessments(assigned_to,updated);
     CREATE INDEX IF NOT EXISTS review_events ON reviews(participant_id,created);
     ''')
-    if connection.execute('SELECT 1 FROM users LIMIT 1').fetchone():
+    if not seed or connection.execute('SELECT 1 FROM users LIMIT 1').fetchone():
         return
     stamp = now()
     password = generate_password_hash('BetweenDemo!26')
@@ -637,8 +719,8 @@ def init_db(connection):
             connection.execute('INSERT INTO reviews(participant_id,actor,status,note,owner,due_date,outcome,created) VALUES(?,?,?,?,?,?,?,?)', (pid, 'Jamie Morgan', status, 'Fictional demonstration review.', 'Jamie Morgan', '2026-11-10' if status != 'Closed' else '', 'Demo follow-up agreed.' if status != 'Closed' else 'Demo review completed.', created))
     for key, value in (
         ('consent', 'Demo consent v1. Research consent, guardian verification and assent wording await protocol approval.'),
-        ('questionnaire', 'behaviour-demo-1. Appendix A source wording and time bands require approval. PHQ-9, GAD-7 and WEMWBS are not administered.'),
-        ('support_directory', 'No verified local services configured. No support requests are monitored.'),
+        ('questionnaire', 'behaviour-demo-1 with optional wellbeing-1 PHQ-9/GAD-7 responses. WEMWBS totals require a licensed source administration. Local clinical protocol and age-group suitability need professional approval.'),
+        ('support_directory', 'Manage source-checked contacts under Support directory. Support-request response coverage is an operator responsibility; the demonstration is not monitored.'),
         ('enrolment', 'Demo only — live enrolment closed')):
         connection.execute('INSERT INTO config VALUES(?,?,?)', (key, value, 1))
     connection.execute('INSERT INTO audit(actor,action,target,detail,created) VALUES(?,?,?,?,?)', ('system', 'Demo workspace created', 'study', 'All example records and model classes are fictional.', stamp))

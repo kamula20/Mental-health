@@ -32,7 +32,7 @@ Plotting uses the optional development dependency matplotlib. Use the same Pytho
 ## Try the integration
 
 1. Start the app and open `http://127.0.0.1:5000`.
-2. Choose **Start my assessment**, enter `BETWEEN-DEMO`, complete the example answers and submit. Each access-code entry creates a new fictional participant, avoiding the named account's one-submission limit.
+2. Choose **Start my assessment**, enter `BETWEEN-DEMO`, complete the example answers and submit. Each access-code entry creates a new fictional participant, or use the named account's repeat-assessment action for follow-up visits.
 3. The young person's summary shows the saved Low/Moderate/High result, a plain-language explanation of contributing answers, their review status separately, and support information. Numerical probabilities, model versions and training details remain in the staff view. A Low model class does not establish that someone is safe or well; no class represents clinical urgency.
 4. Sign in as `counsellor@between.demo` with `BetweenDemo!26`. Open the newly assigned case. The saved prediction appears as **Research model estimate** in the case and printable report, with expandable model information and class probabilities.
 5. Sign in as `researcher@between.demo`. **Model status** shows model comparisons, test metrics, per-class sensitivity and specificity, a confusion matrix, feature importance and data-cleaning counts. **Data quality** explains the dataset.
@@ -147,6 +147,18 @@ To use another trusted artifact directory in a test/deployment entry point, pass
 
 ## Before replacing synthetic data
 
+### External-data evaluation command
+
+Use a separate Python 3.10–3.12 training environment with `requirements-ml.txt`. Prepare a private CSV with `study_id`, `reference_class` and the seven fields in the feature contract. IDs must be unique and pseudonymous; reference labels must be Low/Moderate/High and defined independently of this model. Obtain the necessary consent and study/professional approvals. Do not use model predictions as their own reference labels.
+
+```powershell
+python -m ml.validate_external --input instance/consented-study.csv --output instance/external-evaluation.json --description "Describe the recruitment, independent reference assessment and cohort honestly" --confirm-consented-independent-data
+```
+
+The command refuses the demonstration dataset, duplicate IDs, missing/unknown codes, missing class coverage and very small class counts. It does not train or alter the model and exports no participant rows. The resulting metrics, dataset hash, model hash and limitations are recorded without marking the model clinically released. Consent and independence are operator declarations, not facts the code can verify.
+
+Set `BETWEEN_EXTERNAL_EVALUATION` to the private report path and restart the app to view its aggregate results in Insights → Clinical evaluation. Reports for a different model fingerprint are rejected. Clinician agreement/disagreement is recorded separately and is not automatically promoted to a validated training label. A real external dataset and participant study have not been supplied or conducted as part of this implementation.
+
 A real study needs an approved target/protocol, appropriately administered and permitted outcome instruments, actual consent/assent, independently collected labelled data, population-specific error and fairness analysis, calibration and a separate external evaluation. Longitudinal claims need longitudinal outcomes. Keep held-out participants and institutions separate as the study design requires, and have the appropriate professionals review how outputs are used.
 
-Do not present these synthetic rows as questionnaire respondents or the measured simulation metrics as evidence about Kenyan youth. No instrument wording or licences have been added, no real study has been conducted, and app support remains an unmonitored demonstration.
+Do not present these synthetic rows as questionnaire respondents or the measured simulation metrics as evidence about Kenyan youth. PHQ-9/GAD-7 wording is now available under the published reproduction permission. No WEMWBS licence or real participant study has been obtained or fabricated; app support remains an unmonitored demonstration.
