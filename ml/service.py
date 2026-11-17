@@ -16,13 +16,10 @@ class ModelService:
     def __init__(self, artifact_dir=DEFAULT_ARTIFACT_DIR):
         self.pipeline = None
         self.report = None
-        self.reason = 'Synthetic model unavailable. Install ML requirements, train the model and restart the app.'
+        self.runtime = None
+        self.error_code = None
+        self.reason = 'Model unavailable. Run python -m ml.check for setup details.'
         try:
-            import joblib
-            import pandas as pd
-            import sklearn
-            from sklearn.exceptions import InconsistentVersionWarning
-
             directory = Path(artifact_dir)
             manifest = json.loads((directory / 'manifest.json').read_text(encoding='utf-8'))
             for filename, key in [('model.joblib', 'model_sha256'), ('evaluation.json', 'evaluation_sha256')]:
@@ -30,9 +27,26 @@ class ModelService:
                     raise ValueError('Artifact integrity check failed')
             report = json.loads((directory / 'evaluation.json').read_text(encoding='utf-8'))
             if (report['schema_version'] != SCHEMA_VERSION or report['features'] != list(FEATURES)
-                    or report['environment']['scikit_learn'] != sklearn.__version__
                     or report['synthetic'] is not True or report['released'] is not False):
                 raise ValueError('Incompatible model metadata')
+            if 'portable_sha256' in manifest:
+                from ml.portable import PortableModel
+                if hashlib.sha256((directory / 'model.json').read_bytes()).hexdigest() != manifest['portable_sha256']:
+                    raise ValueError('Portable model integrity check failed')
+                pipeline = PortableModel(json.loads((directory / 'model.json').read_text(encoding='utf-8')),
+                                         report, manifest['model_sha256'], manifest['evaluation_sha256'])
+                self.frame = lambda rows, columns=None: rows
+                self.pipeline, self.report, self.artifact_hash = pipeline, report, manifest['model_sha256']
+                self.runtime, self.reason = 'portable', None
+                return
+            import joblib
+            import pandas as pd
+            import sklearn
+            from sklearn.exceptions import InconsistentVersionWarning
+            if report['environment']['scikit_learn'] != sklearn.__version__:
+                self.reason = 'The saved model needs scikit-learn ' + report['environment']['scikit_learn'] + '. Install requirements-ml.txt and restart, or restore the checked-in model.json and manifest.json.'
+                self.error_code = 'dependency_version'
+                return
             # joblib is pickle-based: load only developer-controlled local artifacts.
             # A checksum detects accidental corruption; it is not an authenticity proof.
             with warnings.catch_warnings():
@@ -45,18 +59,28 @@ class ModelService:
                 raise ValueError('Unexpected model classes')
             self.pipeline, self.report, self.frame = pipeline, report, pd.DataFrame
             self.artifact_hash = manifest['model_sha256']
+            self.runtime = 'sklearn'
             self.reason = None
         except Exception as error:
-            # Do not log answers or patient identifiers. Loading must fail closed.
-            logger.warning('Synthetic ML unavailable (%s).', type(error).__name__)
+            if isinstance(error, FileNotFoundError):
+                self.error_code = 'missing_artifact'
+                self.reason = 'Model files are missing. Restore the complete ml/artifacts folder from GitHub, including model.json, model.joblib, evaluation.json and manifest.json, then restart the app.'
+            elif isinstance(error, ImportError):
+                self.error_code = 'missing_dependency'
+                self.reason = 'ML dependencies are missing and no portable model was found. Restore model.json and its manifest from GitHub, or install requirements-ml.txt with the Python used to start the app.'
+            else:
+                self.error_code = 'invalid_artifact'
+                self.reason = 'Model files are damaged or incompatible. Restore the complete ml/artifacts folder from the same GitHub commit and restart. Run python -m ml.check to verify the setup.'
+            # Do not log answers, identifiers or arbitrary exception messages.
+            logger.warning('Model unavailable: %s (%s).', self.reason, type(error).__name__)
 
     def status(self):
         if self.report:
-            return self.report
+            return {**self.report, 'runtime': self.runtime}
         return {'available': False, 'released': False, 'synthetic': True, 'version': None,
                 'dataset': None, 'target': None, 'evaluation_date': None,
                 'test_sample_size': None, 'metrics': None, 'confusion_matrix': None,
-                'reason': self.reason, 'limitations': LIMITATION}
+                'reason': self.reason, 'error_code': self.error_code, 'runtime': self.runtime, 'limitations': LIMITATION}
 
     def predict(self, answers):
         result = {'estimate': None, 'model_version': None, 'probabilities': None,
@@ -98,6 +122,19 @@ class ModelService:
                 or prediction.get('artifact_sha256', self.artifact_hash) != self.artifact_hash):
             return None
         try:
+            from ml.portable import PortableModel
+            if isinstance(self.pipeline, PortableModel):
+                actual = self.pipeline.predict_proba([answers])[0]
+                saved = prediction.get('probabilities') or {}
+                classes = self.pipeline.classes_
+                if set(saved) != set(classes) or any(not math.isclose(float(saved[label]), value, rel_tol=1e-9, abs_tol=1e-10)
+                                                     for label, value in zip(classes, actual)):
+                    return None
+                selected = prediction['estimate']
+                if selected != classes[max(range(len(actual)), key=actual.__getitem__)]:
+                    return None
+                other = max((label for label in classes if label != selected), key=saved.get)
+                return self.pipeline.explain(answers, selected, other)
             import numpy as np
 
             classifier = self.pipeline.named_steps['classifier']

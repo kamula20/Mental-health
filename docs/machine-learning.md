@@ -4,18 +4,21 @@ This implementation follows the 39-page `COMPLETE PROJECT.pdf`: predict three cl
 
 ## Run and reproduce
 
-From the project root, with Python 3.10–3.12:
+To run the app from the project root, use Python 3.10 or newer:
 
 ```powershell
 python -m pip install -r requirements.txt
 python app.py
 ```
 
-The trained model is included in `ml/artifacts/`. Starting Flask loads it once; requests do not train a model. No API key, external ML service, internet connection or separate model server is needed after installing dependencies.
+The trained model is included in `ml/artifacts/`, in both original joblib and portable JSON formats. The app's runtime requires Flask only; the JSON model evaluates the fitted weights and preprocessing using Python's standard library. It does not need NumPy, pandas, joblib or scikit-learn installed to generate results and explanations. Starting Flask loads it once; requests do not train a model. No API key, external ML service, internet connection or separate model server is needed after installing Flask.
 
-To reproduce the dataset and fitted model:
+For a read-only verification of the files and an in-memory prediction, run `python -m ml.check`. The output includes the exact Python executable, the model version and the selected runtime. If setup fails, it gives recovery instructions without recording an assessment.
+
+To reproduce the dataset and fitted model, use a separate Python 3.10–3.12 training environment and install the training/development dependencies first:
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python -m ml.generate_data --samples 6000 --seed 2026
 python -m ml.train --seed 2026
 python tools/plot_ml_evaluation.py
@@ -114,6 +117,7 @@ For the preprocessing rationale, see [scikit-learn's data leakage guidance](http
 | `ml/data/synthetic_raw.csv` | Generated examples including missing, duplicated and invalid values |
 | `ml/artifacts/processed.csv` | Cleaned examples with train/validation/test membership; missing inputs retained until fold-specific imputation |
 | `ml/artifacts/model.joblib` | Final fitted preprocessing + classifier pipeline |
+| `ml/artifacts/model.json` | Export of that same fitted Logistic Regression model for dependency-free prediction and explanations |
 | `ml/artifacts/evaluation.json` | Full metrics, comparisons, provenance hashes, settings, class counts, versions and limitations |
 | `ml/artifacts/evaluation.md` | Short measured evaluation report |
 | `ml/artifacts/cleaning.json` | Cleaning and missingness counts |
@@ -125,11 +129,17 @@ The CSVs deliberately contain only synthetic records and can accompany a project
 
 ## Flask persistence and failure behaviour
 
-`ml/service.py` loads the trusted local artifact at app creation, validates checksums, schema, model/report version, scikit-learn compatibility and class labels, and exposes `predict()` and `status()`. `requirements-ml.txt` pins the fitted model's main numerical dependencies. Joblib uses Python pickle: **only load locally generated, developer-controlled artifacts**. Checksums detect accidental corruption; they do not authenticate hostile replacements. There is no model-upload or remote artifact-loading API. See [scikit-learn persistence guidance](https://scikit-learn.org/1.5/model_persistence.html).
+`ml/service.py` validates checksums, schema, model/report version and class labels, then prefers the portable JSON runtime. The JSON is bound to the original model and evaluation hashes. `ml/portable.py` performs the original median/mode imputation, age scaling, one-hot encoding, multinomial linear scores and numerically stable softmax using the standard library. It retains the original model fingerprint so saved predictions remain explainable. Regression tests compare all 6,000 cleaned examples against the original scikit-learn pipeline to tight numerical tolerance and exercise complete assessment submission while blocking every ML-package import.
+
+The loader still supports legacy artifact folders without a portable manifest entry; those require the exact dependencies in `requirements-ml.txt`. This compatibility path checks the scikit-learn version before loading joblib. Joblib uses Python pickle: **only load locally generated, developer-controlled artifacts**. The normal portable runtime never unpickles the binary. Checksums detect accidental corruption; they do not authenticate hostile replacements. There is no model-upload or remote artifact-loading API. See [scikit-learn persistence guidance](https://scikit-learn.org/1.5/model_persistence.html).
+
+Training automatically exports supported multinomial Logistic Regression winners via `ml/export_model.py`. Run `python -m ml.export_model` in the original training environment to export an existing trusted model without retraining. Non-linear or one-vs-rest winners explicitly remove stale portable metadata and use the legacy runtime until a matching portable implementation is provided.
 
 New submissions validate the full assessment first, then infer using only the feature allowlist. Complete inputs are required at serving time: training-time imputation is not an excuse to turn incomplete submissions into a Low result. A dependency, missing-file, integrity, version or prediction error leaves a clear unavailable result; submitting answers still succeeds. No fallback class or default probability is invented.
 
 The `model_predictions` table is created additively for existing databases. Its participant-keyed JSON snapshot is written in the same transaction as the assessment and includes class, class probabilities, source, version and limitation text. Submission retries return that snapshot. Reads, clinician reviews and model replacement do not rescore it. Original seeded outputs remain recognisable legacy examples.
+
+An assessment saved during an outage continues to show no result on a normal page load. The participant can explicitly choose **Calculate my result**, which calls `POST /api/assessment/result`. This endpoint validates saved inputs and questionnaire version, respects authentication/CSRF and withdrawal, and writes the missing prediction once in a transaction. It preserves original answers, submission date and review status, increments the record version for clinician conflict handling, and records an audit event. Existing non-null predictions cannot be replaced by this endpoint. An ongoing outage returns 503 and leaves the saved record unchanged.
 
 `GET /api/model` returns aggregate model metadata to clinicians, Insights and administrators. `GET /api/research` includes the same metadata for Insights. Neither includes participant rows. Existing role, assignment, CSRF, draft, consent and review controls remain in force. The model does not alter review status, trigger notifications, invent psychometric scores, ingest app submissions for training or unlock live enrolment.
 

@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server, WSGIRequestHandler
 from app import create_app
+from ml.service import ModelService
 
 OUT = ROOT / 'test-results'
 OUT.mkdir(exist_ok=True)
@@ -155,7 +156,18 @@ try:
         check(page.get_by_text('Wellbeing questionnaires are not enabled.', exact=True).is_visible(), 'Unapproved wellbeing instruments remain disabled')
         page.get_by_role('button', name='Review my answers', exact=False).click()
         page.wait_for_selector('.review-heading')
-        page.get_by_role('button', name='Submit demo assessment', exact=False).click()
+        runtime = app.extensions['between_model']
+        original_predict = runtime.predict
+        runtime.predict = ModelService(OUT / 'missing-model-test').predict
+        try:
+            page.get_by_role('button', name='Submit demo assessment', exact=False).click()
+            page.get_by_role('heading', name='Result not available', exact=True).wait_for()
+            check(page.get_by_role('button',name='Calculate my result',exact=False).is_visible(), 'A saved assessment without a result offers calculation recovery')
+        finally:
+            runtime.predict = original_predict
+        page.get_by_role('button', name='Calculate my result', exact=False).click()
+        page.get_by_role('heading',name='Assessment result:',exact=False).wait_for()
+        check(page.get_by_role('button',name='Calculate my result',exact=False).count()==0, 'Calculation recovery produces a result without another assessment submission')
         page.wait_for_selector('.receipt')
         check(page.get_by_role('heading', name='Thank you for sharing.', exact=True).is_visible(), 'Participant receives a plain-language completion summary')
         check(page.get_by_role('heading', name='Waiting for review', exact=True).is_visible(), 'Participant sees their actual review status in plain language')

@@ -274,7 +274,7 @@ function resultExplanation(r) {
   return `<h3>What influenced this result?</h3><p>${lead}</p>${factors.length?`<ul>${factors.map(f=>`<li><strong>${esc(wording[f.feature])}</strong>: ${esc(answerLabel(f.feature,f.answer,r.answers))}.</li>`).join('')}</ul>`:''}<p class="small muted">Other answers were considered too. These explain the model's estimate; they do not show what caused a health problem.</p>`;
 }
 function participantResult(r) {
-  if(!r.estimate)return `<p class="eyebrow">YOUR RESULT</p><h2>Result not available</h2><p>Your answers are saved, but an estimate could not be produced. You can still seek support or discuss your answers with a counsellor.</p>`;
+  if(!r.estimate)return `<p class="eyebrow">YOUR RESULT</p><h2>Result not available</h2><p>Your answers are saved. You can try calculating your result again without repeating the assessment.</p><div class="error-slot"></div><button type="button" class="button small" data-action="calculate-result">Calculate my result ${icon('arrow')}</button><p class="small muted">You can seek support with or without a result.</p>`;
   return `<p class="eyebrow">YOUR RESULT</p><h2>Assessment result: ${esc(r.estimate)}</h2><p>Your answers matched the ${esc(r.estimate)} group most closely.</p><p class="small muted">This project's estimate is not a diagnosis. A counsellor can help you understand it.</p><div class="section-block">${resultExplanation(r)}</div>${r.estimate==='Low'?'<p>A Low result does not mean you cannot be struggling. You can ask for support whatever your result.</p>':'<p>If anything in your answers is worrying you, consider discussing it with a counsellor or someone you trust.</p>'}`;
 }
 function summary() {
@@ -459,6 +459,10 @@ document.addEventListener('click',async event=>{
   if(!action)return;
   if(action==='cancel-dialog'){$('#dialog').close();return;}
   if(action==='retry'){if(state.retry)await state.retry();else $('#assessment-form')?.requestSubmit();return;}
+  if(action==='calculate-result'){
+    const run=async()=>{el.disabled=true;try{const data=await api('/assessment/result','POST',{});state.assessment.submission=data.submission;summary();announce('Your result is ready.');}catch(error){errorBox(error,$('#assessment-result'));}finally{el.disabled=false;}};
+    state.retry=run;await run();return;
+  }
   if(action==='password'){const input=$('#password');const shown=input.type==='password';input.type=shown?'text':'password';el.textContent=shown?'Hide':'Show';el.setAttribute('aria-pressed',String(shown));return;}
   if(action==='staff-menu'){const nav=$('#staff-navigation');const open=nav.classList.toggle('open');el.setAttribute('aria-expanded',String(open));return;}
   if(action==='clear-filters'){state.queue={search:'',status:'',estimate:'',missing:false,date:'',sort:'newest',page:1};await queue();return;}

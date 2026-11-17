@@ -55,7 +55,7 @@ Press CTRL+C to quit
 
 ## Requirements
 
-- Python **3.10-3.12** for the pinned ML dependencies; development has been verified with Python 3.11.
+- Python **3.10 or newer** to run the app; development has been verified with Python 3.11. Training uses the separately pinned Python 3.10-3.12 environment.
 - `pip` and Python's `venv` module.
 - A modern web browser.
 - An internet connection for the initial dependency installation. Fonts and application assets are served locally afterward.
@@ -99,7 +99,7 @@ Press **Ctrl+C** in the server terminal to stop the website.
 
 ### Windows launcher
 
-[Start-Between.cmd](Start-Between.cmd) is an alternative launcher. It runs `python app.py` using whichever Python is on your `PATH`; dependencies must be installed in that Python environment. It does not automatically select `.venv`. If you used the recommended setup above, the explicit virtual-environment command is the reliable way to start the app.
+[Start-Between.cmd](Start-Between.cmd) is an alternative launcher. It uses `.venv\Scripts\python.exe` when available, otherwise Python on `PATH`. It checks Flask and the model before starting. Install requirements using that same Python executable.
 
 **Open the Flask URL, not an HTML file.** Double-clicking `static/index.html` will not connect the API. The nested `Youth Mental Health App/` folder contains the preserved older site, not the current application.
 
@@ -201,9 +201,10 @@ The behaviour questionnaire is versioned as `behaviour-demo-1`. Its source wordi
 
 The complete implementation and reproduction guide is in [docs/machine-learning.md](docs/machine-learning.md). It includes the proposal mapping, provisional target definition, generator assumptions, feature contract, preprocessing, model comparison and limitations.
 
-The checked-in model is ready to use after installing requirements. To regenerate and train:
+The checked-in model is ready to use after installing requirements. The app uses the included portable JSON model with Python and Flask only; no training libraries or retraining are needed to obtain results. Check setup with `python -m ml.check`. To regenerate and train in a Python 3.10-3.12 environment:
 
 ```powershell
+python -m pip install -r requirements-ml.txt
 python -m ml.generate_data --samples 6000 --seed 2026
 python -m ml.train --seed 2026
 ```
@@ -271,9 +272,9 @@ The reset database does not contain previous submissions, notes, requests or acc
 ```text
 .
 ├── app.py                       # Flask app, API, SQLite schema and example data
-├── requirements.txt             # Flask and pinned ML dependencies
+├── requirements.txt             # Flask runtime dependency
 ├── requirements-dev.txt         # Runtime plus test dependencies
-├── Start-Between.cmd             # Windows launcher using Python on PATH
+├── Start-Between.cmd             # Windows launcher preferring .venv
 ├── static/
 │   ├── index.html               # App shell and current script/style loading
 │   ├── app.js                   # Routes, forms, session and workspace interactions
@@ -324,7 +325,7 @@ Start with `GET /api/session` to receive a CSRF token and the current session. S
 | --- | --- |
 | Session | `GET /api/session`, `POST /api/login`, `POST /api/logout`, `POST /api/session/extend` |
 | Temporary access | `POST /api/study-access` |
-| Own assessment | `GET /api/assessment`, `PUT /api/assessment/draft`, `POST /api/assessment/submit` |
+| Own assessment | `GET /api/assessment`, `PUT /api/assessment/draft`, `POST /api/assessment/submit`, `POST /api/assessment/result` (retry a missing result) |
 | Support | `POST /api/support` |
 | Participation choices | `GET` / `POST /api/privacy/requests` |
 | Assigned cases | `GET /api/cases`, `GET /api/cases/<id>` |
@@ -344,7 +345,7 @@ Assessment submission requires a `submission_id`; retry the same submission with
 | `python` is not recognised | Install Python or try `py -3` on Windows. Use the virtual environment's Python once created. |
 | `No module named flask` | Install requirements with the same Python executable used to start the server. |
 | PowerShell blocks activation scripts | Activation is unnecessary; use `.\.venv\Scripts\python.exe` directly. |
-| The launcher cannot find dependencies | `Start-Between.cmd` uses Python on PATH, not automatically `.venv`. Use the documented virtual-environment start command. |
+| The launcher cannot find dependencies | `Start-Between.cmd` prefers `.venv`. Install `requirements.txt` with that environment's Python. The launcher prints the model check before opening the app. |
 | The page will not open | Confirm the server terminal is still running, then use its printed URL and port. Opening the HTML file directly is unsupported. |
 | Another app uses port 5000 | Set `PORT=5001` using the configuration example and open the matching URL. |
 | The old design is visible | Open the root Flask app, not the older nested site. Refresh with **Ctrl+F5** on Windows or **Cmd+Shift+R** on macOS. |
@@ -354,7 +355,7 @@ Assessment submission requires a `submission_id`; retry the same submission with
 | A temporary draft is missing after sign-out | Access-code sessions cannot be recovered. Use the named participant account for return visits. |
 | A clinician cannot open a record | Ask an administrator to check the assignment and active role; unassigned records are rejected by the server. |
 | A review save reports a conflict | Keep any unsaved note you need, reload the latest record and review the change before saving again. |
-| No model estimate appears | Install requirements, check that `ml/artifacts/` is intact and restart Flask. Existing records are not rescored automatically. See the ML guide below. Local services remain unconnected. |
+| No model estimate appears | Run `python -m ml.check`, restore the full `ml/artifacts/` folder if needed, and restart Flask. For an assessment saved without a result, choose **Calculate my result**. Existing results are never overwritten. See the ML guide above. |
 | Browser QA cannot launch Chromium | Install it with the environment's `python -m playwright install chromium`, or set `BETWEEN_BROWSER`. Port 5055 must also be free. |
 
 ## Deployment status

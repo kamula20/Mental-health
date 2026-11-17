@@ -345,6 +345,43 @@ def create_app(test_config=None):
         row = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
         return jsonify(submission=record_json(row, True)), 201
 
+    @app.post('/api/assessment/result')
+    @require('participant')
+    def calculate_missing_result():
+        payload()
+        participant = db().execute('SELECT * FROM participants WHERE user_id=?', (g.user['id'],)).fetchone()
+        if participant['withdrawn']:
+            abort(409, description='This participation has been withdrawn.')
+        row = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
+        if not row:
+            abort(404, description='Submit your assessment before calculating a result.')
+        if row['estimate'] is not None:
+            return jsonify(submission=record_json(row, True), duplicate=True)
+        if row['questionnaire_version'] != QUESTIONNAIRE_VERSION:
+            abort(409, description='This assessment uses a different questionnaire version and needs staff review.')
+        answers = json.loads(row['answers'])
+        errors = validate_answers(answers, True)
+        if errors:
+            return jsonify(error='This saved assessment has missing or invalid answers and needs staff review.'), 409
+        prediction = model.predict(answers)
+        if prediction['estimate'] is None:
+            return jsonify(error='Your answers are saved, but a result is still unavailable. Please try again after the service has been restored.'), 503
+        stamp = now()
+        changed = db().execute('UPDATE assessments SET estimate=?,updated=?,version=version+1 WHERE participant_id=? AND version=? AND estimate IS NULL',
+                               (prediction['estimate'], stamp, row['participant_id'], row['version']))
+        if changed.rowcount != 1:
+            db().rollback()
+            latest = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
+            if latest and latest['estimate'] is not None:
+                return jsonify(submission=record_json(latest, True), duplicate=True)
+            abort(409, description='Your assessment was updated. Reload the page before trying again.')
+        db().execute('INSERT INTO model_predictions(participant_id,result,created) VALUES(?,?,?) ON CONFLICT(participant_id) DO UPDATE SET result=excluded.result,created=excluded.created',
+                     (row['participant_id'], json.dumps(prediction), stamp))
+        audit('Calculated previously unavailable model result', row['participant_id'], prediction['model_version'])
+        db().commit()
+        latest = db().execute('SELECT * FROM assessments WHERE user_id=?', (g.user['id'],)).fetchone()
+        return jsonify(submission=record_json(latest, True), duplicate=False)
+
     @app.post('/api/support')
     @require('participant')
     def support_request():

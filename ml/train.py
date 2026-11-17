@@ -82,7 +82,7 @@ def preprocessing():
 
 def evaluate(model, features, target):
     predicted = model.predict(features)
-    probabilities = model.predict_proba(features)
+    probabilities = np.asarray(model.predict_proba(features))
     classes = list(model.classes_)
     ordered_labels = sorted(LABELS)
     auc = roc_auc_score(target, probabilities[:, [classes.index(label) for label in ordered_labels]],
@@ -170,6 +170,8 @@ def train(input_path, output_dir, seed=2026):
     write_json(output_dir / 'evaluation.json', report)
     write_json(output_dir / 'manifest.json', {'model_sha256': sha256(output_dir / 'model.joblib'),
                                             'evaluation_sha256': sha256(output_dir / 'evaluation.json')})
+    from ml.export_model import export_model
+    export_model(output_dir)
     write_json(output_dir / 'cleaning.json', cleaning)
     pd.DataFrame({'synthetic_id': data.loc[test_idx, 'synthetic_id'], 'actual': y.loc[test_idx],
                   'predicted': final.predict(x.loc[test_idx])}).to_csv(output_dir / 'test_predictions.csv', index=False)
